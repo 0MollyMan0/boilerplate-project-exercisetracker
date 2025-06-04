@@ -3,143 +3,148 @@ const app = express();
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const crypto = require("crypto");
+const { log } = require("console");
 require("dotenv").config();
 
 // Middleware
 app.use(cors());
 app.use(express.static("public"));
-app.use(bodyParser.json());
+app.use(bodyParser.json()); // Pour JSON
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Page d'accueil
+// Index
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/views/index.html");
 });
 
-// Structure de données
+// Objet pour stocker les users
 const users = {};
 
-// Générer un ID unique depuis le nom d'utilisateur
+// Fonction qui génère un id à partir d'un username
 function generateId(username) {
   if (typeof username !== "string") {
     throw new TypeError("generateId attend une chaîne de caractères");
   }
   const hash = crypto.createHash("sha256").update(username).digest("hex");
-  return hash.slice(0, 24); // Simule un ID MongoDB
+  return hash.slice(0, 24);
 }
 
-// Ajouter un nouvel utilisateur
-function addUser(username, _id, log = []) {
-  users[_id] = { username, _id, log };
+// Fonction pour ajouter un user
+function addUser(username, _id, log = [], count = 0) {
+  users[_id] = { username, _id, log, count };
 }
 
-// Récupérer un utilisateur
+// Trouver un user
 function getUser(id) {
   return users[id] || null;
 }
 
-// Supprimer un utilisateur (pas strictement nécessaire ici)
+// Fonction pour supprimer un user
 function deleteUser(id) {
   delete users[id];
 }
 
-// Créer un nouvel utilisateur
+// Requete post pour créer un User
 app.post("/api/users", (req, res) => {
   const username = req.body.username;
-
-  if (!username || typeof username !== "string") {
-    return res.status(400).json({ error: "Nom d'utilisateur invalide" });
+  // Vérifie qu'un username est reçu
+  if (!username) {
+    return res.status(400).json({ error: "need username" });
   }
 
-  const _id = generateId(username);
-  const log = [];
-  addUser(username, _id, log);
-
+  const id = generateId(username);
+  addUser(username, id);
+  const user = getUser(id);
   res.json({
-    username,
-    _id,
+    username: user.username,
+    _id: user._id,
   });
 });
 
-// Récupérer tous les utilisateurs
-app.get("/api/users", (req, res) => {
-  res.json(Object.values(users));
-});
-
-// Ajouter un exercice
+// Requete post pour ajouter un exercice
 app.post("/api/users/:_id/exercises", (req, res) => {
   const _id = req.params._id;
   const user = getUser(_id);
 
+  // Test si l'user existe
   if (!user) {
-    return res.status(404).json({ error: "Utilisateur non trouvé" });
+    return res.status(404).json({ error: "user not found" });
   }
 
-  const description = req.body.description;
-  const duration = parseInt(req.body.duration);
-  let date = req.body.date ? new Date(req.body.date) : new Date();
+  // Initialisation des valeurs déjà présente
+  const username = user.username;
+  const id = user._id;
 
-  if (!description || isNaN(duration)) {
-    return res
-      .status(400)
-      .json({ error: "Champs description ou durée invalide" });
+  // Ajout de l'exercice dans le tableau
+  const desc = String(req.body.description);
+  const duration = Number(req.body.duration);
+  const date = req.body.date ? new Date(req.body.date) : new Date();
+
+  if (desc === "undefined" || isNaN(duration)) {
+    return res.status(400).json({ error: "missing field" });
   }
-
-  if (isNaN(date.getTime())) {
-    date = new Date();
-  }
-
-  const formattedDate = date.toDateString();
 
   const exercise = {
-    description: String(description),
-    duration: Number(duration),
-    date: formattedDate,
+    description: desc,
+    duration: duration,
+    date: date.toDateString(),
   };
 
+  // Ajoute l'exercice au tableau d'exercices
   user.log.push(exercise);
 
+  console.log(user);
   res.json({
     _id: user._id,
     username: user.username,
-    date: formattedDate,
+    date: date,
     duration: duration,
-    description: description,
+    description: desc,
   });
 });
 
-// Récupérer le log d'exercices avec filtres
+// Affiche tout les user
+app.get("/api/users/", (req, res) => {
+  const usersList = Object.values(users).map((user) => ({
+    _id: user._id,
+    username: user.username,
+  }));
+  res.json(usersList);
+});
+
+// Requete get pour voir tout les exercices d'un user
 app.get("/api/users/:_id/logs", (req, res) => {
   const _id = req.params._id;
   const user = getUser(_id);
 
+  // Test si l'user existe
   if (!user) {
     return res.status(404).json({ error: "Utilisateur non trouvé" });
   }
 
-  let log = user.log;
+  let log = user.log || [];
 
-  // Filtres
   const from = req.query.from ? new Date(req.query.from) : null;
   const to = req.query.to ? new Date(req.query.to) : null;
   const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
-  if (from instanceof Date && !isNaN(from)) {
+  // Filtrage par date
+  if (from) {
     log = log.filter((entry) => new Date(entry.date) >= from);
   }
-
-  if (to instanceof Date && !isNaN(to)) {
+  if (to) {
     log = log.filter((entry) => new Date(entry.date) <= to);
   }
 
-  if (!isNaN(limit)) {
+  // Limite
+  if (limit) {
     log = log.slice(0, limit);
   }
 
   res.json({
-    _id: user._id,
+    _id: user.id,
     username: user.username,
-    count: log.length,
+    count: user.log.length,
     log: log,
   });
 });
