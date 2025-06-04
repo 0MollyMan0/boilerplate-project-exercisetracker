@@ -29,8 +29,8 @@ function generateId(username) {
 }
 
 // Fonction pour ajouter un user
-function addUser(username, _id, count, log) {
-  users[_id] = { username, _id, count, log};
+function addUser(username, _id, log) {
+  users[_id] = { username, _id, log};
 }
 
 // Trouver un user 
@@ -47,9 +47,8 @@ function deleteUser(id) {
 app.post('/api/users', (req, res) => {
   const username = req.body.username;
   const id = generateId(username);
-  const count = 0;
   const log = [];
-  addUser(username, id, count, log);
+  addUser(username, id, log);
   res.json({
     username: username,
     _id: id,
@@ -61,7 +60,7 @@ app.post('/api/users/:_id/exercises', (req, res) => {
   const _id = req.params._id;
   const user = getUser(_id);
 
-
+  // Test si l'user existe
   if (!user) {
     return res.status(404).json({ error: "Utilisateur non trouvé" });
   }
@@ -80,10 +79,9 @@ app.post('/api/users/:_id/exercises', (req, res) => {
   user.log.push(exercise);
 
 
-  const count = user.count + 1;
   const log = user.log;
 
-  addUser(username, id, count, log);
+  addUser(username, id, log);
   res.json({
     _id: id,
     username: username,
@@ -92,6 +90,44 @@ app.post('/api/users/:_id/exercises', (req, res) => {
     description: desc
   });
 });
+
+// Requete get pour voir tout les exercices d'un user
+app.get('/api/users/:_id/logs', (req, res) => {
+  const _id = req.params._id;
+  const user = getUser(_id);
+
+  // Test si l'user existe
+  if (!user) {
+    return res.status(404).json({ error: "Utilisateur non trouvé" });
+  }
+
+  let log = user.log || [];
+
+  const from = req.query.from ? new Date(req.query.from) : null;
+  const to = req.query.to ? new Date(req.query.to) : null;
+  const limit = req.query.limit ? parseInt(req.query.limit) : null;
+
+  // Filtrage par date
+  if (from) {
+    log = log.filter(entry => new Date(entry.date) >= from);
+  }
+  if (to) {
+    log = log.filter(entry => new Date(entry.date) <= to);
+  }
+
+  // Limite 
+  if (limit){
+    log = log.slice(0, limit);
+  }
+
+  res.json({
+    _id: user.id,
+    username: user.username,
+    date: user.log.length,
+    log: log
+  })
+});
+
 
 
 const listener = app.listen(process.env.PORT || 3000, () => {
