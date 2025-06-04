@@ -92,7 +92,7 @@ app.post('/api/users/:_id/exercises', (req, res) => {
 });
 
 app.get('/api/users/', (req, res) => {
-  res.json(users);
+  res.json(Object.values(users));
 })
 
 // Requete get pour voir tout les exercices d'un user
