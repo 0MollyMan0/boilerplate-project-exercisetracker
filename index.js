@@ -91,6 +91,10 @@ app.post('/api/users/:_id/exercises', (req, res) => {
   });
 });
 
+app.get('/api/users/', (req, res) => {
+  res.json(users);
+})
+
 // Requete get pour voir tout les exercices d'un user
 app.get('/api/users/:_id/logs', (req, res) => {
   const _id = req.params._id;
