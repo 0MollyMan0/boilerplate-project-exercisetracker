@@ -50,14 +50,15 @@ app.post('/api/users', (req, res) => {
   const count = 0;
   const log = [];
   addUser(username, id, count, log);
-  res.json(getUser(id));
+  res.json({
+    username: username,
+    _id: id,
+  });
 });
 
 // Requete post pour ajouter un exercice
 app.post('/api/users/:_id/exercises', (req, res) => {
   const _id = req.params._id;
-  console.log("getUser pour", _id, ":", getUser(_id));
-  console.log("Tous les users :", users);
   const user = getUser(_id);
 
 
@@ -79,8 +80,8 @@ app.post('/api/users/:_id/exercises', (req, res) => {
   user.log.push(exercise);
 
 
-  const count = 1;
-  const log = user.log.push(exercise);
+  const count = user.count + 1;
+  const log = user.log;
 
   addUser(username, id, count, log);
   res.json({
