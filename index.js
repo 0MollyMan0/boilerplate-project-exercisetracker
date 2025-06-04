@@ -1,139 +1,149 @@
-const express = require('express')
-const app = express()
+const express = require("express");
+const app = express();
 const bodyParser = require("body-parser");
-const cors = require('cors')
+const cors = require("cors");
 const crypto = require("crypto");
-require('dotenv').config()
+require("dotenv").config();
 
 // Middleware
-app.use(cors())
-app.use(express.static('public'))
-app.use(bodyParser.json()); // Pour JSON
+app.use(cors());
+app.use(express.static("public"));
+app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Index
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/views/index.html')
+// Page d'accueil
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/views/index.html");
 });
 
-// Objet pour stocker les users
+// Structure de données
 const users = {};
 
-// Fonction qui génère un id à partir d'un username
+// Générer un ID unique depuis le nom d'utilisateur
 function generateId(username) {
-  if (typeof username !== 'string') {
+  if (typeof username !== "string") {
     throw new TypeError("generateId attend une chaîne de caractères");
   }
   const hash = crypto.createHash("sha256").update(username).digest("hex");
-  return hash.slice(0, 24);
+  return hash.slice(0, 24); // Simule un ID MongoDB
 }
 
-// Fonction pour ajouter un user
-function addUser(username, _id, log) {
-  users[_id] = { username, _id, log};
+// Ajouter un nouvel utilisateur
+function addUser(username, _id, log = []) {
+  users[_id] = { username, _id, log };
 }
 
-// Trouver un user 
+// Récupérer un utilisateur
 function getUser(id) {
   return users[id] || null;
 }
 
-// Fonction pour supprimer un user
+// Supprimer un utilisateur (pas strictement nécessaire ici)
 function deleteUser(id) {
   delete users[id];
 }
 
-// Requete post pour créer un User
-app.post('/api/users', (req, res) => {
+// Créer un nouvel utilisateur
+app.post("/api/users", (req, res) => {
   const username = req.body.username;
-  const id = generateId(username);
+
+  if (!username || typeof username !== "string") {
+    return res.status(400).json({ error: "Nom d'utilisateur invalide" });
+  }
+
+  const _id = generateId(username);
   const log = [];
-  addUser(username, id, log);
+  addUser(username, _id, log);
+
   res.json({
-    username: username,
-    _id: id,
+    username,
+    _id,
   });
 });
 
-// Requete post pour ajouter un exercice
-app.post('/api/users/:_id/exercises', (req, res) => {
+// Récupérer tous les utilisateurs
+app.get("/api/users", (req, res) => {
+  res.json(Object.values(users));
+});
+
+// Ajouter un exercice
+app.post("/api/users/:_id/exercises", (req, res) => {
   const _id = req.params._id;
   const user = getUser(_id);
 
-  // Test si l'user existe
   if (!user) {
     return res.status(404).json({ error: "Utilisateur non trouvé" });
   }
 
-  deleteUser(_id);
+  const description = req.body.description;
+  const duration = parseInt(req.body.duration);
+  let date = req.body.date ? new Date(req.body.date) : new Date();
 
-  // Initialisation des valeurs déjà en présente
-  const username = user.username;
-  const id = user._id;
+  if (!description || isNaN(duration)) {
+    return res
+      .status(400)
+      .json({ error: "Champs description ou durée invalide" });
+  }
 
-  // Ajout de l'exercice dans le tableau
-  const desc = req.body.description;
-  const duration = req.body.duration;
-  const date = req.body.date;
-  const exercise = {desc, duration, date};
+  if (isNaN(date.getTime())) {
+    date = new Date();
+  }
+
+  const formattedDate = date.toDateString();
+
+  const exercise = {
+    description: String(description),
+    duration: Number(duration),
+    date: formattedDate,
+  };
+
   user.log.push(exercise);
 
-
-  const log = user.log;
-
-  addUser(username, id, log);
   res.json({
-    _id: id,
-    username: username,
-    date: date,
+    _id: user._id,
+    username: user.username,
+    date: formattedDate,
     duration: duration,
-    description: desc
+    description: description,
   });
 });
 
-app.get('/api/users/', (req, res) => {
-  res.json(Object.values(users));
-})
-
-// Requete get pour voir tout les exercices d'un user
-app.get('/api/users/:_id/logs', (req, res) => {
+// Récupérer le log d'exercices avec filtres
+app.get("/api/users/:_id/logs", (req, res) => {
   const _id = req.params._id;
   const user = getUser(_id);
 
-  // Test si l'user existe
   if (!user) {
     return res.status(404).json({ error: "Utilisateur non trouvé" });
   }
 
-  let log = user.log || [];
+  let log = user.log;
 
+  // Filtres
   const from = req.query.from ? new Date(req.query.from) : null;
   const to = req.query.to ? new Date(req.query.to) : null;
   const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
-  // Filtrage par date
-  if (from) {
-    log = log.filter(entry => new Date(entry.date) >= from);
-  }
-  if (to) {
-    log = log.filter(entry => new Date(entry.date) <= to);
+  if (from instanceof Date && !isNaN(from)) {
+    log = log.filter((entry) => new Date(entry.date) >= from);
   }
 
-  // Limite 
-  if (limit){
+  if (to instanceof Date && !isNaN(to)) {
+    log = log.filter((entry) => new Date(entry.date) <= to);
+  }
+
+  if (!isNaN(limit)) {
     log = log.slice(0, limit);
   }
 
   res.json({
-    _id: user.id,
+    _id: user._id,
     username: user.username,
-    date: user.log.length,
-    log: log
-  })
+    count: log.length,
+    log: log,
+  });
 });
 
-
-
 const listener = app.listen(process.env.PORT || 3000, () => {
-  console.log('Your app is listening on port ' + listener.address().port)
-})
+  console.log("Your app is listening on port " + listener.address().port);
+});
